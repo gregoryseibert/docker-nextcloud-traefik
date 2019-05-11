@@ -1,0 +1,66 @@
+version: '3'
+
+services:
+  db:
+    image: postgres:alpine
+    restart: unless-stopped
+    container_name: nextclouddb
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    env_file:
+      - db.env
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    container_name: nextcloudredis
+
+  app:
+    image: nextcloud:fpm-alpine
+    restart: unless-stopped
+    container_name: nextcloud
+    volumes:
+      - ./data/nextcloud:/var/www/html
+    environment:
+      - POSTGRES_HOST=db
+    env_file:
+      - db.env
+    depends_on:
+      - db
+      - redis
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    container_name: nextcloudweb
+    volumes:
+      - ./data/nextcloud:/var/www/html:ro
+    labels:
+      - traefik.enable=true
+      - traefik.backend=example.com
+      - traefik.frontend.rule=Host:example.com
+      - traefik.docker.network=web
+      - traefik.port=80
+      - "traefik.frontend.headers.STSSeconds=315360000"
+    depends_on:
+      - app
+    ports:
+      - 8080:80
+    networks:
+      - web
+      - default
+
+  cron:
+    image: nextcloud:fpm-alpine
+    restart: unless-stopped
+    container_name: nextcloudcron
+    volumes:
+      - ./data/nextcloud:/var/www/html
+    entrypoint: /cron.sh
+    depends_on:
+      - db
+      - redis
+
+networks:
+  web:
+    external: true
